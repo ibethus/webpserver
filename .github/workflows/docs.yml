@@ -25,16 +25,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Ruby
-        uses: ruby/setup-ruby@v1
-        with:
-          ruby-version: "3.3"
-          bundler-cache: true
-          working-directory: docs
-
       - name: Build Jekyll site
-        run: bundle exec jekyll build --source docs --destination docs/_site
-        working-directory: ${{ github.workspace }}
+        uses: actions/jekyll-build-pages@v1
+        with:
+          source: ./docs/
+          destination: ./docs/_site
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3

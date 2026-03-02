@@ -1,0 +1,6 @@
+.vscode
+target/
+_site/
+.bundle/
+vendor/
+Gemfile.lock
