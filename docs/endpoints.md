@@ -64,14 +64,14 @@ curl -F 'file=@photo.jpg' \
 
 ---
 
-## POST /from-url
+## POST / (JSON — upload from URL)
 
 Upload an image from a remote URL. The server fetches the URL, validates the content type and processes the bytes identically to a direct upload.
 
 ### Request
 
 ```
-POST /from-url
+POST /
 Content-Type: application/json
 
 {"url": "https://example.com/photo.jpg"}
@@ -108,14 +108,14 @@ Authorization: Bearer <your-api-key>
 curl -X POST \
   -H "Content-Type: application/json" \
   -d '{"url": "https://picsum.photos/800/600.jpg"}' \
-  http://localhost:8080/from-url
+  http://localhost:8080/
 
 # URL upload with authentication
 curl -X POST \
   -H "Authorization: Bearer your-api-key" \
   -H "Content-Type: application/json" \
   -d '{"url": "https://picsum.photos/800/600.jpg"}' \
-  http://localhost:8080/from-url
+  http://localhost:8080/
 ```
 
 ---
@@ -252,4 +252,41 @@ Liveness probe endpoint. Always returns 200. Never requires authentication. Used
 ```bash
 curl http://localhost:8080/liveness
 # {"status":"ok"}
+```
+
+---
+
+## GET /q/metrics
+
+Exposes application metrics in Prometheus text format. Served by the [Micrometer](https://micrometer.io/) registry bundled with Quarkus.
+
+### Authentication
+
+This endpoint is always public.
+
+### Response — 200 OK
+
+Prometheus text exposition format (`text/plain; version=0.0.4`).
+
+```
+# HELP jvm_memory_used_bytes ...
+# TYPE jvm_memory_used_bytes gauge
+jvm_memory_used_bytes{area="heap",...} 4.2e+07
+...
+```
+
+### Example
+
+```bash
+curl http://localhost:8080/q/metrics
+```
+
+To scrape from Prometheus, add a job to your `prometheus.yml`:
+
+```yaml
+scrape_configs:
+  - job_name: webpserver
+    static_configs:
+      - targets: ['localhost:8080']
+    metrics_path: /q/metrics
 ```
