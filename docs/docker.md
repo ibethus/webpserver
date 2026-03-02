@@ -141,7 +141,7 @@ cd webpserver
 mvn package -DskipTests \
   -Dquarkus.container-image.build=true \
   -Dquarkus.container-image.tag=local
-docker run -v webpserver_images:/images -p 8080:8080 ibethus/webpserver:local
+docker run -v webpserver_images:/images -p 8080:8080 <your_user>/webpserver:local
 ```
 
 ---
