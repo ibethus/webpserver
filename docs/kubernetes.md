@@ -223,6 +223,37 @@ kubectl -n webpserver top pods
 
 ---
 
+## API base path
+
+By default, the API endpoints and Swagger UI are served at the root path (`/`). To serve them under a different path (for example, when behind an API gateway or reverse proxy), add `QUARKUS_HTTP_ROOT_PATH` to the `ConfigMap`:
+
+```yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: webpserver-config
+  namespace: webpserver
+data:
+  QUARKUS_HTTP_ROOT_PATH: "/api/v1"
+  # ... other keys
+```
+
+With this setting:
+- API endpoints respond to `https://example.com/api/v1/`
+- Swagger UI is at `https://example.com/api/v1/q/swagger-ui`
+- OpenAPI spec is at `https://example.com/api/v1/q/openapi`
+
+Then re-apply:
+
+```bash
+kubectl apply -f kubernetes/deployment.yaml
+kubectl -n webpserver rollout restart deployment/webpserver
+```
+
+This affects both the actual endpoints and the documentation automatically.
+
+---
+
 ## Updating to a new version
 
 ```bash

@@ -58,6 +58,16 @@ Authorization: Bearer your-secret-key-here
 
 Rate limiting applies to upload requests only (`POST /`), per client IP address.
 
+---
+
+## API documentation
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `QUARKUS_HTTP_ROOT_PATH` | `/` | Root path for all API endpoints and Swagger UI. Use this to serve the API under a different path. Example: `/api/v1` would make endpoints available at `https://example.com/api/v1/` (Swagger UI at `/api/v1/q/swagger-ui`, API spec at `/api/v1/q/openapi`). Useful when deploying behind a reverse proxy or API gateway. |
+
+Changing the root path affects **both** the API endpoints **and** the OpenAPI / Swagger UI documentation — they automatically adjust to the new path.
+
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `WEBPSERVER_MAX_UPLOADS_PER_MINUTE` | `20` | Maximum upload requests per IP per minute. |

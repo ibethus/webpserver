@@ -68,6 +68,22 @@ environment:
   WEBPSERVER_VALID_SIZES: "100,200,320,640,1280"
 ```
 
+### API base path
+
+By default, the API endpoints and Swagger UI are served at the root path (`/`). To serve them under a different path (for example, when behind an API gateway or reverse proxy), use `QUARKUS_HTTP_ROOT_PATH`:
+
+```yaml
+environment:
+  QUARKUS_HTTP_ROOT_PATH: "/api/v1"
+```
+
+With this setting:
+- API endpoints respond to `http://localhost:8080/api/v1/`
+- Swagger UI is at `http://localhost:8080/api/v1/q/swagger-ui`
+- OpenAPI spec is at `http://localhost:8080/api/v1/q/openapi`
+
+This affects the actual endpoints and the documentation automatically.
+
 ---
 
 ## Environment variables
