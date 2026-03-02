@@ -7,10 +7,7 @@ nav_order: 1
 
 # webpserver
 
-<p align="center">
-  <img src="../assets/webpserver.svg" alt="webpserver" />
-</p>
-
+![webpserver](../assets/webpserver.svg)
 
 Self-hosted minimalist WebP image service. Upload images in any common format; receive them back in WebP at any size, cached on disk.
 
