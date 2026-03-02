@@ -7,8 +7,6 @@ nav_order: 4
 
 # Technical Architecture
 
-This page summarises the internal design of webpserver. The full specification, including detailed method contracts for every class, is in [ARCHITECTURE.md](https://github.com/ibethus/webpserver/blob/main/ARCHITECTURE.md) in the repository root.
-
 ---
 
 ## Technology choices
@@ -73,7 +71,7 @@ Input bytes
     │    JPEG / PNG / WebP / GIF
     │
     ├─ GIF → WebPCodec.encodeGifToWebP()   ← animated WebP preserved
-    ├─ WebP → decode → re-encode           ← normalises quality
+    ├─ WebP → stored as-is                 ← no re-encode, animated WebP safe
     └─ JPEG/PNG → ImageIO.read() → encode
                                      │
                           WebPCodec.encodeImage(img, quality)
@@ -121,12 +119,10 @@ encode → write {uuid}_{w}x{h}.tmp → Files.move(..., ATOMIC_MOVE) → {uuid}_
 
 In-memory indexes across pods converge lazily: if pod B is missing a variant created by pod A, the `Files.exists()` check at step 2 above catches it on the next request.
 
-See [ARCHITECTURE.md section 12](https://github.com/ibethus/webpserver/blob/main/ARCHITECTURE.md#12-multi-pod-safety) for the full analysis.
-
 ---
 
 ## Platform support
 
 webp4j ships native libraries for `linux/amd64` and `linux/arm64` inside the JAR. The correct library is extracted and loaded at runtime. No platform-specific configuration is needed.
 
-The Docker image is built multi-arch via `docker buildx` and `QEMU` in the CI/CD pipeline.
+The Docker image is built multi-arch (`linux/amd64`, `linux/arm64`) via [Quarkus Jib](https://quarkus.io/guides/container-image) in the CI/CD pipeline — no Dockerfile or Docker daemon required.

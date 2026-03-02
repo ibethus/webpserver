@@ -106,10 +106,10 @@ docker run -v webpserver_images:/images ...
 docker run -v /path/on/host:/images ...
 ```
 
-**Important:** The process runs as UID 1001. If using a bind mount, ensure the host directory is owned by UID 1001:
+**Important:** The process runs as a non-root user. If using a bind mount, ensure the host directory is writable by that user:
 
 ```bash
-sudo chown -R 1001:1001 /path/on/host
+sudo chmod o+w /path/on/host
 ```
 
 ---
@@ -133,12 +133,15 @@ The container is marked as `healthy` after the first successful probe. Use `dock
 
 ## Building the image locally
 
+The image is built with [Quarkus Jib](https://quarkus.io/guides/container-image) — no Dockerfile required.
+
 ```bash
 git clone https://github.com/ibethus/webpserver.git
 cd webpserver
-./mvnw package -DskipTests
-docker build -t webpserver:local .
-docker run -v webpserver_images:/images -p 8080:8080 webpserver:local
+mvn package -DskipTests \
+  -Dquarkus.container-image.build=true \
+  -Dquarkus.container-image.tag=local
+docker run -v webpserver_images:/images -p 8080:8080 ibethus/webpserver:local
 ```
 
 ---

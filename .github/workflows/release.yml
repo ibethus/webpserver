@@ -6,11 +6,12 @@ on:
       - "v*.*.*"
 
 jobs:
-  build:
-    name: Build JAR
+  release:
+    name: Build, push image and create release
     runs-on: ubuntu-latest
-    outputs:
-      version: ${{ steps.version.outputs.version }}
+    permissions:
+      contents: write
+      packages: write
 
     steps:
       - name: Checkout
@@ -27,78 +28,18 @@ jobs:
           distribution: temurin
           cache: maven
 
-      - name: Build JAR (skip tests — already validated by CI)
-        run: ./mvnw package -B -DskipTests -Drevision=${{ steps.version.outputs.version }}
-
-      - name: Upload quarkus-app artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: quarkus-app
-          path: target/quarkus-app/
-          retention-days: 1
-
-  docker:
-    name: Build and push Docker image
-    needs: build
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Download quarkus-app artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: quarkus-app
-          path: target/quarkus-app/
-
-      - name: Set up QEMU (for ARM64 cross-build)
-        uses: docker/setup-qemu-action@v3
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Extract Docker metadata
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ghcr.io/${{ github.repository_owner }}/webpserver
-          tags: |
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=raw,value=latest
-
-      - name: Build and push multi-arch image
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          platforms: linux/amd64,linux/arm64
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-  release:
-    name: Create GitHub Release
-    needs: docker
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - name: Build and push multi-arch image to GHCR
+        run: |
+          mvn package -B -DskipTests \
+            -Dquarkus.container-image.push=true \
+            -Dquarkus.container-image.registry=ghcr.io \
+            -Dquarkus.container-image.group=${{ github.repository_owner }} \
+            -Dquarkus.container-image.name=webpserver \
+            -Dquarkus.container-image.tag=${{ steps.version.outputs.version }} \
+            -Dquarkus.container-image.additional-tags=latest \
+            -Dquarkus.container-image.username=${{ github.actor }} \
+            -Dquarkus.container-image.password=${{ secrets.GITHUB_TOKEN }} \
+            -Dquarkus.jib.platforms=linux/amd64,linux/arm64
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2

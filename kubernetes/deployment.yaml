@@ -44,7 +44,6 @@ data:
 #
 # Single replica: use accessModes: ReadWriteOnce (supported by all storage providers).
 # Multi replica:  use accessModes: ReadWriteMany (requires NFS, CephFS, Longhorn RWX, etc.).
-#                 Read ARCHITECTURE.md section 12 for multi-pod consistency guarantees.
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
@@ -69,7 +68,6 @@ metadata:
     app: webpserver
 spec:
   # For multi-replica deployments, switch PVC to ReadWriteMany.
-  # See ARCHITECTURE.md section 12 for consistency guarantees.
   replicas: 1
   selector:
     matchLabels:

@@ -3,7 +3,6 @@
 ## Project overview
 
 Self-hosted WebP image server. Java 21 + Quarkus 3.x + webp4j (JNI/libwebp). No database, no front-end.
-Full spec: `ARCHITECTURE.md` (the authoritative implementation contract, read it first).
 API contract: `openapi.yaml` (OpenAPI 3.1).
 
 ## Architecture in one paragraph
@@ -85,7 +84,7 @@ Read them only through `AppConfig` — never with `System.getenv()` directly.
 
 Test config overrides are in `src/test/resources/application.properties`.
 Test fixtures (sample.jpg, sample.png, sample.webp, sample.gif, invalid.bin) live in
-`src/test/resources/fixtures/`. All 20 test cases are specified in ARCHITECTURE.md §14.
+`src/test/resources/fixtures/`.
 
 ## CI/CD
 

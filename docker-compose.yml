@@ -1,8 +1,6 @@
 services:
   webpserver:
     image: ghcr.io/ibethus/webpserver:latest
-    # To build locally instead of pulling the image:
-    # build: .
     ports:
       - "8080:8080"
     volumes:
