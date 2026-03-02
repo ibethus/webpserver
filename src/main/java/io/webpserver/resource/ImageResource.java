@@ -81,7 +81,6 @@ public class ImageResource {
     }
 
     @POST
-    @Path("from-url")
     @Consumes(MediaType.APPLICATION_JSON)
     @Produces(MediaType.APPLICATION_JSON)
     @RunOnVirtualThread

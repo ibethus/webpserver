@@ -7,6 +7,11 @@ nav_order: 1
 
 # webpserver
 
+<p align="center">
+  <img src="../assets/webpserver.svg" alt="webpserver" />
+</p>
+
+
 Self-hosted minimalist WebP image service. Upload images in any common format; receive them back in WebP at any size, cached on disk.
 
 Built with **Java 21**, **Quarkus** and **webp4j** (libwebp 1.6.0 via JNI).

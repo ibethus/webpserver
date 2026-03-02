@@ -7,7 +7,7 @@ import jakarta.ws.rs.core.Response;
 public class InvalidSizeException extends WebApplicationException {
     public InvalidSizeException(int requestedSize) {
         super(Response.status(Response.Status.BAD_REQUEST)
-                .entity(new ErrorResponse("Requested size " + requestedSize + " is not in the list of valid sizes."))
+                .entity(new ErrorResponse("Size " + requestedSize + " is not in the list of valid sizes."))
                 .type(MediaType.APPLICATION_JSON)
                 .build());
     }

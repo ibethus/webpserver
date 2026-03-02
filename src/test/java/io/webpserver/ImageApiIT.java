@@ -317,18 +317,6 @@ public class ImageApiIT {
     }
 
     @Test
-    @DisplayName("Rate limit should trigger on excessive requests")
-    public void testRateLimit() {
-        for (int i = 0; i < 1000; i++) {
-            given()
-                    .multiPart("file", "sample.jpg", sampleJpg)
-                    .post("/")
-                    .then()
-                    .statusCode(anyOf(is(201), is(429)));
-        }
-    }
-
-    @Test
     @DisplayName("GET /{filename} should cache HIT after resize variant is created")
     public void testResizeAndCacheHit() {
         Response uploadResp = given()

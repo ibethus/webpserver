@@ -81,7 +81,7 @@ public class ConversionService {
 
         BufferedImage img;
         if (FORMAT_WEBP.equals(format)) {
-            img = WebPCodec.decodeImage(inputBytes);
+            return inputBytes;
         } else {
             img = ImageIO.read(new ByteArrayInputStream(inputBytes));
             if (img == null) {

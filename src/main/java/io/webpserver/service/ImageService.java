@@ -35,6 +35,7 @@ public class ImageService {
     private static final Duration HTTP_REQUEST_TIMEOUT = Duration.ofSeconds(30);
     private static final String WEBP_EXTENSION = ".webp";
     private static final String TMP_EXTENSION = ".tmp";
+    private static final ImageVariantKey ORIGINAL_KEY = new ImageVariantKey(0, 0);
 
     private final CacheService cacheService;
     private final ConversionService conversionService;
@@ -123,8 +124,12 @@ public class ImageService {
             Path originalPath = cacheService.getImagesDir().resolve(filename);
             try {
                 byte[] bytes = Files.readAllBytes(originalPath);
-                LOG.debugf("Served original: %s", filename);
-                return new ServeResult(bytes, false);
+                boolean hit = entry.hasVariant(ORIGINAL_KEY);
+                if (!hit) {
+                    cacheService.registerVariant(uuid, ORIGINAL_KEY);
+                }
+                LOG.debugf("Served original: %s (cache %s)", filename, hit ? "HIT" : "MISS");
+                return new ServeResult(bytes, hit);
             } catch (NoSuchFileException e) {
                 LOG.warnf("Original file missing from disk for uuid: %s", uuid);
                 throw new ImageNotFoundException();
