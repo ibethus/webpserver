@@ -1,0 +1,64 @@
+services:
+  webpserver:
+    image: ghcr.io/ibethus/webpserver:latest
+    # To build locally instead of pulling the image:
+    # build: .
+    ports:
+      - "8080:8080"
+    volumes:
+      - webpserver_images:/images
+    environment:
+      # --- Storage ---
+      # Directory inside the container where images are stored.
+      # Must match the volume mount target above.
+      WEBPSERVER_IMAGES_DIR: /images
+
+      # --- Authentication ---
+      # Static Bearer token required for upload (if REQUIRE_API_KEY_FOR_UPLOAD=true)
+      # and always required for delete.
+      # Leave commented out to disable authentication entirely.
+      # WEBPSERVER_API_KEY: change-me-to-a-strong-secret
+
+      # Require the API key for upload requests.
+      # Set to true in production to prevent anonymous uploads.
+      WEBPSERVER_REQUIRE_API_KEY_FOR_UPLOAD: "false"
+
+      # --- File size ---
+      # Maximum allowed upload size in megabytes.
+      WEBPSERVER_MAX_SIZE_MB: "16"
+
+      # --- Allowed resize sizes ---
+      # Comma-separated list of allowed pixel values for ?w= and ?h= query parameters.
+      # Requests for unlisted sizes are rejected with 400.
+      # Strongly recommended in production to prevent cache-bombing attacks.
+      # Leave commented out to allow any size.
+      # WEBPSERVER_VALID_SIZES: "100,200,320,640,1280"
+
+      # --- Rate limiting (per IP, upload only) ---
+      WEBPSERVER_MAX_UPLOADS_PER_MINUTE: "20"
+      WEBPSERVER_MAX_UPLOADS_PER_HOUR: "100"
+      WEBPSERVER_MAX_UPLOADS_PER_DAY: "1000"
+
+      # --- WebP encoding ---
+      # Lossy quality factor (0.0-100.0). Higher = better quality, larger file.
+      WEBPSERVER_WEBP_QUALITY: "75.0"
+      # Set to true to use lossless compression for all images.
+      # Recommended for PNG sources, not for JPEG (results in larger files).
+      WEBPSERVER_WEBP_LOSSLESS: "false"
+
+      # --- CORS ---
+      # Restrict which origins can access the API.
+      # Example: QUARKUS_HTTP_CORS_ORIGINS: "https://app.example.com,https://admin.example.com"
+      QUARKUS_HTTP_CORS: "true"
+      QUARKUS_HTTP_CORS_ORIGINS: "*"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8080/liveness || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    restart: unless-stopped
+
+volumes:
+  webpserver_images:
+    driver: local

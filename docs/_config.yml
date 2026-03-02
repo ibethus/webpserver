@@ -1,0 +1,34 @@
+title: webpserver
+description: Self-hosted minimalist WebP image service built with Java 21 and Quarkus.
+baseurl: "/webpserver"
+url: "https://ibethus.github.io"
+
+theme: minima
+
+minima:
+  skin: dark
+
+header_pages:
+  - index.md
+  - endpoints.md
+  - configuration.md
+  - architecture.md
+  - docker.md
+  - kubernetes.md
+
+markdown: kramdown
+highlighter: rouge
+
+kramdown:
+  input: GFM
+  syntax_highlighter: rouge
+
+plugins:
+  - jekyll-feed
+  - jekyll-seo-tag
+
+exclude:
+  - Gemfile
+  - Gemfile.lock
+  - "*.gem"
+  - _site
