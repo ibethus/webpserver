@@ -43,7 +43,7 @@ jobs:
 
       - name: Build and push multi-arch image to GHCR
         run: |
-          ./mvnw package -B -DskipTests \
+          mvn package -B -DskipTests \
             -Dquarkus.container-image.push=true \
             -Dquarkus.container-image.registry=ghcr.io \
             -Dquarkus.container-image.group=${{ github.repository_owner }} \
