@@ -109,21 +109,17 @@ public class ImageService {
     public ServeResult serveImage(String inputFilename, Integer w, Integer h) throws IOException {
         String uuid = FilenameUtils.getFilename(inputFilename);
         checkProvidedSizes(w, h);
-        Optional<ImageEntry> entryOpt = cacheService.getEntry(uuid);
-        if (entryOpt.isEmpty()) {
-            addToCacheIfImageOnDisk(inputFilename);
-        }
-        return entryOpt.map(entry -> {
-            try {
-                if (w == null && h == null) {
-                    return serveOriginal(inputFilename, uuid, entry);
-                } else {
-                    return serveVariant(w, h, entry, uuid);
-                }
-            } catch (IOException e) {
-                throw new ImageNotFoundException();
+        ImageEntry entry = cacheService.getEntry(uuid)
+                .orElseGet(ImageEntry::new);
+        try {
+            if (w == null && h == null) {
+                return serveOriginal(inputFilename, uuid, entry);
+            } else {
+                return serveVariant(w, h, entry, uuid);
             }
-        }).orElseThrow(ImageNotFoundException::new);
+        } catch (IOException e) {
+            throw new ImageNotFoundException();
+        }
 
     }
 
@@ -178,25 +174,22 @@ public class ImageService {
     @Nonnull
     private ServeResult serveOriginal(String inputFilename, String uuid, ImageEntry entry) throws IOException {
         Path originalPath = cacheService.getImagesDir().resolve(inputFilename);
-        try {
-            byte[] bytes = Files.readAllBytes(originalPath);
-            boolean hit = entry.hasVariant(ORIGINAL_KEY);
-            if (!hit) {
-                cacheService.registerVariant(uuid, ORIGINAL_KEY);
-            }
-            LOG.infof("Served original: %s (cache %s)", uuid, hit ? "HIT" : "MISS");
-            return new ServeResult(bytes, hit);
-        } catch (NoSuchFileException e) {
-            LOG.warnf("Original file missing from disk for name : %s", inputFilename);
-            throw new ImageNotFoundException();
-        }
-    }
 
-    private void addToCacheIfImageOnDisk(String inputFilename) throws IOException {
-        Path originalPath = cacheService.getImagesDir().resolve(inputFilename);
-        if (Files.exists(originalPath)) {
-            cacheService.addFileToCache(inputFilename);
+        if (entry.hasVariant(ORIGINAL_KEY)) {
+            byte[] bytes = Files.readAllBytes(originalPath);
+            LOG.infof("Cache HIT (in-memory): %s original", uuid);
+            return new ServeResult(bytes, true);
         }
+
+        if (Files.exists(originalPath)) {
+            cacheService.registerImage(uuid);
+            byte[] bytes = Files.readAllBytes(originalPath);
+            LOG.infof("Cache MISS: %s original", uuid);
+            return new ServeResult(bytes, false);
+        }
+
+        LOG.warnf("Original file missing from disk for: %s", uuid);
+        throw new ImageNotFoundException();
     }
 
     private void checkProvidedSizes(Integer w, Integer h) {

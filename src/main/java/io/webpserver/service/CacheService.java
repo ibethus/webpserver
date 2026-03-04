@@ -79,7 +79,7 @@ public class CacheService {
 
     public void registerImage(String name) {
         imagesIndex.registerEntry(name);
-        LOG.infof("Registered image: %s", name);
+        LOG.infof("Registered original: %s", name);
     }
 
     public void registerVariant(String name, ImageVariant key) {
