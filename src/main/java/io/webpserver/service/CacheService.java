@@ -78,7 +78,7 @@ public class CacheService {
     }
 
     public void registerImage(String name) {
-        imagesIndex.addOriginal(name);
+        imagesIndex.registerEntry(name);
         LOG.infof("Registered image: %s", name);
     }
 

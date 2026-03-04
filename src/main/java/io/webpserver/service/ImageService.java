@@ -96,7 +96,7 @@ public class ImageService {
             throw new RemoteUrlException("Request to remote URL was interrupted");
         } catch (IOException e) {
             LOG.warnf(e, "Failed to fetch remote URL: %s", url);
-            throw new RemoteUrlException("Failed to fetch URL: " + e.getMessage());
+            throw new RemoteUrlException("Failed to fetch URL: " + e.getMessage(), 422);
         }
         String urlPath = URI.create(url).getPath();
         String lastSegment = urlPath.substring(urlPath.lastIndexOf('/') + 1);
@@ -182,7 +182,7 @@ public class ImageService {
             byte[] bytes = Files.readAllBytes(originalPath);
             boolean hit = entry.hasVariant(ORIGINAL_KEY);
             if (!hit) {
-                cacheService.registerVariant(inputFilename, ORIGINAL_KEY);
+                cacheService.registerVariant(uuid, ORIGINAL_KEY);
             }
             LOG.infof("Served original: %s (cache %s)", uuid, hit ? "HIT" : "MISS");
             return new ServeResult(bytes, hit);

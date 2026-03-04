@@ -19,8 +19,7 @@ public class GlobalExceptionMapper implements ExceptionMapper<Throwable> {
                         case NotAllowedException ignored -> Response.status(Response.Status.NOT_ACCEPTABLE)
                                         .entity(new ErrorResponse("Not allowed."))
                                         .type(MediaType.APPLICATION_JSON);
-                        case WebApplicationException ignored -> Response.status(Response.Status.NOT_FOUND)
-                                        .entity(new ErrorResponse("Not found."))
+                        case WebApplicationException wae -> Response.fromResponse(wae.getResponse())
                                         .type(MediaType.APPLICATION_JSON);
                         default -> Response.status(Response.Status.INTERNAL_SERVER_ERROR)
                                         .entity(new ErrorResponse("Internal server error."))
