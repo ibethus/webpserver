@@ -1,0 +1,8 @@
+*.iml
+.idea/
+*.lock
+.bundle/
+vendor/
+_site/
+target/
+.vscode/

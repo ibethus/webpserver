@@ -1,0 +1,197 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: webpserver
+
+---
+# Secret for the API key.
+# Create it with:
+#   kubectl -n webpserver create secret generic webpserver-secret \
+#     --from-literal=api-key=your-strong-secret
+# Then reference it below. If you do not need auth, remove the secretKeyRef env var entries.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: webpserver-secret
+  namespace: webpserver
+type: Opaque
+stringData:
+  api-key: "change-me-to-a-strong-secret"
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: webpserver-config
+  namespace: webpserver
+data:
+  WEBPSERVER_IMAGES_DIR: "/images"
+  WEBPSERVER_REQUIRE_API_KEY_FOR_UPLOAD: "false"
+  WEBPSERVER_MAX_SIZE_MB: "16"
+  # Strongly recommended: restrict to known sizes to prevent cache bombing.
+  # WEBPSERVER_VALID_SIZES: "100,200,320,640,1280"
+  WEBPSERVER_MAX_UPLOADS_PER_MINUTE: "20"
+  WEBPSERVER_MAX_UPLOADS_PER_HOUR: "100"
+  WEBPSERVER_MAX_UPLOADS_PER_DAY: "1000"
+  WEBPSERVER_WEBP_QUALITY: "75.0"
+  WEBPSERVER_WEBP_LOSSLESS: "false"
+  QUARKUS_HTTP_CORS: "true"
+  QUARKUS_HTTP_CORS_ORIGINS: "*"
+
+---
+# PersistentVolumeClaim for image storage.
+#
+# Single replica: use accessModes: ReadWriteOnce (supported by all storage providers).
+# Multi replica:  use accessModes: ReadWriteMany (requires NFS, CephFS, Longhorn RWX, etc.).
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: webpserver-pvc
+  namespace: webpserver
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+  # Uncomment and set the storageClassName if your cluster requires it.
+  # storageClassName: standard
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: webpserver
+  namespace: webpserver
+  labels:
+    app: webpserver
+spec:
+  # For multi-replica deployments, switch PVC to ReadWriteMany.
+  replicas: 1
+  selector:
+    matchLabels:
+      app: webpserver
+  template:
+    metadata:
+      labels:
+        app: webpserver
+    spec:
+      # Run as non-root user (UID 1001 matches the Dockerfile USER directive).
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        fsGroup: 1001
+
+      containers:
+        - name: webpserver
+          image: ghcr.io/ibethus/webpserver:latest
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+
+          envFrom:
+            - configMapRef:
+                name: webpserver-config
+
+          env:
+            # Load the API key from the Secret.
+            # Remove this block if you do not use API key authentication.
+            - name: WEBPSERVER_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: webpserver-secret
+                  key: api-key
+                  optional: true
+
+          volumeMounts:
+            - name: images
+              mountPath: /images
+
+          livenessProbe:
+            httpGet:
+              path: /liveness
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+
+          readinessProbe:
+            httpGet:
+              path: /liveness
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "256Mi"
+            limits:
+              # Memory limit must account for: JVM heap + webp4j native buffers + image decoding.
+              # For large images or high concurrency, increase to 1Gi or more.
+              cpu: "1000m"
+              memory: "512Mi"
+
+      volumes:
+        - name: images
+          persistentVolumeClaim:
+            claimName: webpserver-pvc
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: webpserver
+  namespace: webpserver
+  labels:
+    app: webpserver
+spec:
+  selector:
+    app: webpserver
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+      protocol: TCP
+  type: ClusterIP
+
+---
+# Example Ingress — adapt to your ingress controller.
+# This example uses the nginx ingress controller annotation style.
+# Remove or adapt for Traefik, Istio, etc.
+#
+# To enable TLS, configure cert-manager or provide a pre-existing Secret.
+#
+# Uncomment and configure the block below when ready:
+
+# apiVersion: networking.k8s.io/v1
+# kind: Ingress
+# metadata:
+#   name: webpserver
+#   namespace: webpserver
+#   annotations:
+#     nginx.ingress.kubernetes.io/proxy-body-size: "20m"
+#     nginx.ingress.kubernetes.io/proxy-read-timeout: "60"
+# spec:
+#   ingressClassName: nginx
+#   rules:
+#     - host: images.example.com
+#       http:
+#         paths:
+#           - path: /
+#             pathType: Prefix
+#             backend:
+#               service:
+#                 name: webpserver
+#                 port:
+#                   name: http
+#   tls:
+#     - hosts:
+#         - images.example.com
+#       secretName: webpserver-tls

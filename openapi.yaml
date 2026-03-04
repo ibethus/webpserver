@@ -1,0 +1,487 @@
+openapi: 3.1.0
+
+info:
+  title: webpserver
+  version: 1.0.0
+  description: |
+    Self-hosted minimalist image service.
+
+    All images are converted to WebP on upload and served in WebP format.
+    Resized variants are generated on demand and cached on disk.
+    Animated GIFs are converted to animated WebP.
+
+    ## Authentication
+
+    Authentication uses a static Bearer token configured via the `API_KEY` environment variable.
+
+    - Upload: requires Bearer token only if `REQUIRE_API_KEY_FOR_UPLOAD=true`.
+    - Delete: always requires Bearer token if `API_KEY` is set.
+    - Get / Liveness: always public.
+
+    ## Cache behaviour
+
+    A GET request with `w` and/or `h` query parameters generates a resized variant of the image.
+    The variant is written to disk as `{uuid}_{w}x{h}.webp`.
+    Subsequent requests for the same size are served directly from disk without re-encoding.
+    The in-memory index is rebuilt from disk on application startup.
+
+  contact:
+    name: webpserver
+  license:
+    name: MIT
+
+servers:
+  - url: http://localhost:8080
+    description: Local development
+
+tags:
+  - name: images
+    description: Image upload, retrieval and deletion
+  - name: health
+    description: Service health
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      description: |
+        Static API key configured via the `API_KEY` environment variable.
+        Pass it as `Authorization: Bearer <key>`.
+
+  schemas:
+    UploadResponse:
+      type: object
+      required:
+        - filename
+      properties:
+        filename:
+          type: string
+          description: Generated filename of the stored WebP image.
+          example: "3f2a1b4c-8e7d-4f6a-9b2c-1d3e5f7a9b0c.webp"
+
+    DeleteResponse:
+      type: object
+      required:
+        - status
+        - cached_files_removed
+      properties:
+        status:
+          type: string
+          enum:
+            - deleted
+          example: deleted
+        cached_files_removed:
+          type: integer
+          description: Number of resized variant files that were also deleted.
+          example: 3
+
+    LivenessResponse:
+      type: object
+      required:
+        - status
+      properties:
+        status:
+          type: string
+          enum:
+            - ok
+          example: ok
+
+    ErrorResponse:
+      type: object
+      required:
+        - error
+      properties:
+        error:
+          type: string
+          description: Human-readable description of the error.
+          example: "Unsupported image format. Accepted: jpeg, png, webp, gif."
+
+  responses:
+    Unauthorized:
+      description: Missing or invalid Bearer token.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error: "Missing or invalid Authorization header."
+
+    NotFound:
+      description: Image not found.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error: "Image not found."
+
+    TooManyRequests:
+      description: Rate limit exceeded.
+      headers:
+        Retry-After:
+          schema:
+            type: integer
+          description: Number of seconds to wait before retrying.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error: "Upload rate limit exceeded. Try again later."
+
+    BadRequest:
+      description: Invalid request payload or parameters.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+paths:
+  /:
+    post:
+      operationId: uploadImageMultipart
+      summary: Upload an image via multipart form
+      description: |
+        Accepts an image via multipart form upload.
+        The image is validated, converted to WebP (using webp4j/libwebp), stored on disk,
+        and indexed in memory.
+
+        ### Accepted input formats
+        - JPEG (`image/jpeg`)
+        - PNG (`image/png`)
+        - WebP (`image/webp`) — stored as-is after re-encoding to normalise quality
+        - GIF (`image/gif`) — converted to animated WebP
+
+        ### Request
+        Field name must be `file`. `Content-Type` must be `multipart/form-data`.
+
+        ### Size limit
+        Controlled by `MAX_SIZE_MB` (default 16). Requests exceeding this limit are rejected
+        before processing begins.
+
+        ### Response
+        Returns the generated `filename` which must be used for subsequent GET and DELETE calls.
+      tags:
+        - images
+      security:
+        - {}
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - file
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: The image file to upload.
+      responses:
+        "201":
+          description: Image successfully uploaded and converted.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UploadResponse'
+        "400":
+          description: |
+            The request is malformed. Possible causes:
+            - No file provided.
+            - Unsupported image format.
+            - File exceeds `MAX_SIZE_MB`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                unsupportedFormat:
+                  summary: Unsupported image format
+                  value:
+                    error: "Unsupported image format. Accepted: jpeg, png, webp, gif."
+                fileTooLarge:
+                  summary: File exceeds size limit
+                  value:
+                    error: "File size exceeds the 16 MB limit."
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "429":
+          $ref: '#/components/responses/TooManyRequests'
+        "500":
+          description: Internal server error during conversion or storage.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /from-url:
+    post:
+      operationId: uploadImageFromUrl
+      summary: Upload an image from URL
+      description: |
+        Fetches an image from a remote URL and uploads it.
+        The image is validated, converted to WebP (using webp4j/libwebp), stored on disk,
+        and indexed in memory.
+
+        ### Accepted input formats
+        - JPEG (`image/jpeg`)
+        - PNG (`image/png`)
+        - WebP (`image/webp`) — stored as-is after re-encoding to normalise quality
+        - GIF (`image/gif`) — converted to animated WebP
+
+        ### Request
+        Body must be `application/json` with a single field `url`.
+        The server fetches the remote URL synchronously (virtual thread), validates the
+        content type from the response headers, and processes the downloaded bytes.
+
+        ### Response
+        Returns the generated `filename` which must be used for subsequent GET and DELETE calls.
+      tags:
+        - images
+      security:
+        - {}
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - url
+              properties:
+                url:
+                  type: string
+                  format: uri
+                  description: Publicly accessible URL of the image to fetch and store.
+                  example: "https://example.com/photo.jpg"
+      responses:
+        "201":
+          description: Image successfully fetched and converted.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UploadResponse'
+        "400":
+          description: |
+            The request is malformed. Possible causes:
+            - `url` field missing or empty.
+            - Unsupported image format.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "422":
+          description: |
+            The URL provided is unreachable, returns a non-2xx status,
+            or its content type is not an accepted image format.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "Remote URL returned HTTP 404."
+        "429":
+          $ref: '#/components/responses/TooManyRequests'
+        "500":
+          description: Internal server error during conversion or storage.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /{filename}:
+    get:
+      operationId: getImage
+      summary: Retrieve an image
+      description: |
+        Returns the image identified by `filename`.
+
+        ### Original image
+        If no `w` or `h` parameters are provided, the original WebP file is returned.
+
+        ### Resized variant
+        If `w` and/or `h` are provided, the server returns a resized version of the image.
+
+        #### Cache lookup order
+        1. Check in-memory index: if variant key `(w, h)` is registered for this UUID, serve
+           the file `{uuid}_{w}x{h}.webp` directly.
+        2. Check disk: `Files.exists(variantPath)`. If found, register it in the index and serve.
+        3. Generate: decode the original WebP, resize using `java.awt.Image.getScaledInstance`
+           (bilinear), encode back to WebP via `webp4j`, write to a temporary file, atomically
+           rename to the final path (`Files.move(..., ATOMIC_MOVE)`), register in the index,
+           serve.
+
+        #### Resize semantics
+        Both `w` and `h` can be provided. If only one is provided, the image is resized
+        proportionally (aspect ratio preserved). If both are provided, the image is cropped to
+        fill the target rectangle (cover mode).
+
+        #### VALID_SIZES enforcement
+        If `VALID_SIZES` is configured, both `w` and `h` must be values present in that list.
+        Requests with unlisted sizes are rejected with HTTP 400.
+
+        #### Animated WebP
+        Animated WebP files (converted from GIF) are served as-is regardless of `w` / `h`.
+        Resizing animated WebP is not supported in v1 and returns HTTP 400.
+
+      tags:
+        - images
+      parameters:
+        - name: filename
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: '^[a-f0-9\-]{36}\.webp$'
+          description: The filename returned by the upload endpoint. Must match `{uuidv4}.webp`.
+          example: "3f2a1b4c-8e7d-4f6a-9b2c-1d3e5f7a9b0c.webp"
+        - name: w
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 10000
+          description: Target width in pixels.
+          example: 320
+        - name: h
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 10000
+          description: Target height in pixels.
+          example: 240
+      responses:
+        "200":
+          description: Image content.
+          headers:
+            Content-Type:
+              schema:
+                type: string
+                enum:
+                  - image/webp
+            Cache-Control:
+              schema:
+                type: string
+              description: |
+                Set to `public, max-age=31536000, immutable` for variant files.
+                Set to `public, max-age=3600` for the original file.
+            X-Cache:
+              schema:
+                type: string
+                enum:
+                  - HIT
+                  - MISS
+              description: |
+                `HIT` if the variant was found in the in-memory index or on disk.
+                `MISS` if the variant was generated during this request.
+          content:
+            image/webp:
+              schema:
+                type: string
+                format: binary
+        "400":
+          description: |
+            Invalid parameters. Possible causes:
+            - `w` or `h` value not in `VALID_SIZES`.
+            - Resize requested on an animated WebP.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                invalidSize:
+                  summary: Size not in VALID_SIZES
+                  value:
+                    error: "Requested size 450 is not in the list of valid sizes."
+                animatedResize:
+                  summary: Cannot resize animated WebP
+                  value:
+                    error: "Resizing animated WebP is not supported."
+        "404":
+          $ref: '#/components/responses/NotFound'
+        "500":
+          description: Internal error during decoding, resizing or encoding.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    delete:
+      operationId: deleteImage
+      summary: Delete an image and all its cached variants
+      description: |
+        Deletes the original image file and all resized variants from disk.
+        The image entry is also removed from the in-memory index.
+
+        Authentication is required if `API_KEY` is set (irrespective of
+        `REQUIRE_API_KEY_FOR_UPLOAD`).
+
+        ### Deletion order
+        1. Collect all variant paths for this UUID from the in-memory index.
+        2. Delete each variant file.
+        3. Delete the original file.
+        4. Remove the UUID entry from the in-memory index.
+
+        Deletion is best-effort per file: if a variant file is missing on disk it is skipped
+        without error.
+
+        > On Linux, an in-progress read of a file that is concurrently deleted by this endpoint
+        > will complete successfully because `unlink` only removes the directory entry;
+        > the inode is kept until all file descriptors are closed (POSIX semantics).
+      tags:
+        - images
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: filename
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: '^[a-f0-9\-]{36}\.webp$'
+          description: The filename returned by the upload endpoint.
+          example: "3f2a1b4c-8e7d-4f6a-9b2c-1d3e5f7a9b0c.webp"
+      responses:
+        "200":
+          description: Image and all variants successfully deleted.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeleteResponse'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "404":
+          $ref: '#/components/responses/NotFound'
+        "500":
+          description: Unexpected error during deletion.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /liveness:
+    get:
+      operationId: liveness
+      summary: Liveness probe
+      description: |
+        Returns HTTP 200 unconditionally. Used by Docker healthcheck and Kubernetes
+        liveness probes. Never requires authentication.
+      tags:
+        - health
+      security: []
+      responses:
+        "200":
+          description: Service is alive.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LivenessResponse'
