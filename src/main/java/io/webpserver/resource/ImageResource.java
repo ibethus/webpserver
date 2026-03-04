@@ -68,6 +68,7 @@ public class ImageResource {
             @SecurityRequirement(name = "BearerAuth")
     })
     @APIResponses({
+            @APIResponse(responseCode = "200", description = "Image already exists (duplicate). No new file was written.", content = @Content(mediaType = MediaType.APPLICATION_JSON, schema = @Schema(implementation = ImageService.UploadResult.class))),
             @APIResponse(responseCode = "201", description = "Image successfully uploaded and converted.", content = @Content(mediaType = MediaType.APPLICATION_JSON, schema = @Schema(implementation = ImageService.UploadResult.class))),
             @APIResponse(responseCode = "400", description = "Unsupported image format or file exceeds size limit.", content = @Content(mediaType = MediaType.APPLICATION_JSON, schema = @Schema(implementation = ErrorResponse.class))),
             @APIResponse(responseCode = "401", description = "Missing or invalid Bearer token.", content = @Content(mediaType = MediaType.APPLICATION_JSON, schema = @Schema(implementation = ErrorResponse.class))),
@@ -76,7 +77,10 @@ public class ImageResource {
     })
     public Response uploadMultipart(MultipartBody body) throws IOException {
         byte[] bytes = Files.readAllBytes(body.file.filePath());
-        ImageService.UploadResult result = imageService.upload(bytes);
+        ImageService.UploadResult result = imageService.upload(bytes, body.file.fileName());
+        if (result.alreadyPresent()) {
+            return Response.ok(result).build();
+        }
         return Response.status(Response.Status.CREATED).entity(result).build();
     }
 
@@ -95,6 +99,7 @@ public class ImageResource {
             @SecurityRequirement(name = "BearerAuth")
     })
     @APIResponses({
+            @APIResponse(responseCode = "200", description = "Image already exists (duplicate). No new file was written.", content = @Content(mediaType = MediaType.APPLICATION_JSON, schema = @Schema(implementation = ImageService.UploadResult.class))),
             @APIResponse(responseCode = "201", description = "Image successfully fetched and converted.", content = @Content(mediaType = MediaType.APPLICATION_JSON, schema = @Schema(implementation = ImageService.UploadResult.class))),
             @APIResponse(responseCode = "400", description = "Missing or empty `url` field, or unsupported image format.", content = @Content(mediaType = MediaType.APPLICATION_JSON, schema = @Schema(implementation = ErrorResponse.class))),
             @APIResponse(responseCode = "401", description = "Missing or invalid Bearer token.", content = @Content(mediaType = MediaType.APPLICATION_JSON, schema = @Schema(implementation = ErrorResponse.class))),
@@ -110,6 +115,9 @@ public class ImageResource {
                     .build();
         }
         ImageService.UploadResult result = imageService.uploadFromUrl(body.url());
+        if (result.alreadyPresent()) {
+            return Response.ok(result).build();
+        }
         return Response.status(Response.Status.CREATED).entity(result).build();
     }
 
@@ -138,7 +146,7 @@ public class ImageResource {
             @APIResponse(responseCode = "500", description = "Internal error during decoding, resizing or encoding.", content = @Content(mediaType = MediaType.APPLICATION_JSON, schema = @Schema(implementation = ErrorResponse.class)))
     })
     public Response getImage(
-            @PathParam("filename") @Parameter(name = "filename", in = ParameterIn.PATH, required = true, description = "Filename returned by the upload endpoint. Must be `{uuidv4}.webp`.", example = "3f2a1b4c-8e7d-4f6a-9b2c-1d3e5f7a9b0c.webp", schema = @Schema(type = SchemaType.STRING, pattern = "^[a-f0-9\\-]{36}\\.webp$")) String filename,
+            @PathParam("filename") @Parameter(name = "filename", in = ParameterIn.PATH, required = true, description = "Filename returned by the upload endpoint. Must be `{name}.webp` where `name` contains only lowercase letters, digits, hyphens and dots.", example = "photo.webp", schema = @Schema(type = SchemaType.STRING, pattern = "^[a-z0-9\\-.]+\\.webp$")) String filename,
             @QueryParam("w") @Parameter(name = "w", in = ParameterIn.QUERY, description = "Target width in pixels.", schema = @Schema(type = SchemaType.INTEGER, minimum = "1", maximum = "10000")) Integer w,
             @QueryParam("h") @Parameter(name = "h", in = ParameterIn.QUERY, description = "Target height in pixels.", schema = @Schema(type = SchemaType.INTEGER, minimum = "1", maximum = "10000")) Integer h)
             throws IOException {
@@ -168,7 +176,7 @@ public class ImageResource {
             @APIResponse(responseCode = "500", description = "Unexpected error during deletion.", content = @Content(mediaType = MediaType.APPLICATION_JSON, schema = @Schema(implementation = ErrorResponse.class)))
     })
     public Response deleteImage(
-            @PathParam("filename") @Parameter(name = "filename", in = ParameterIn.PATH, required = true, description = "Filename returned by the upload endpoint.", example = "3f2a1b4c-8e7d-4f6a-9b2c-1d3e5f7a9b0c.webp", schema = @Schema(type = SchemaType.STRING, pattern = "^[a-f0-9\\-]{36}\\.webp$")) String filename)
+            @PathParam("filename") @Parameter(name = "filename", in = ParameterIn.PATH, required = true, description = "Filename returned by the upload endpoint.", example = "photo.webp", schema = @Schema(type = SchemaType.STRING, pattern = "^[a-z0-9\\-.]+\\.webp$")) String filename)
             throws IOException {
         ImageService.DeleteResult result = imageService.deleteImage(filename);
         return Response.ok(result).build();

@@ -21,7 +21,7 @@ info:
     ## Cache behaviour
 
     A GET request with `w` and/or `h` query parameters generates a resized variant of the image.
-    The variant is written to disk as `{uuid}_{w}x{h}.webp`.
+    The variant is written to disk as `{name}_{w}x{h}.webp`.
     Subsequent requests for the same size are served directly from disk without re-encoding.
     The in-memory index is rebuilt from disk on application startup.
 
@@ -54,11 +54,16 @@ components:
       type: object
       required:
         - filename
+        - alreadyPresent
       properties:
         filename:
           type: string
-          description: Generated filename of the stored WebP image.
-          example: "3f2a1b4c-8e7d-4f6a-9b2c-1d3e5f7a9b0c.webp"
+          description: Filename of the stored WebP image, derived from the original filename.
+          example: "photo.webp"
+        alreadyPresent:
+          type: boolean
+          description: True if an image with this name already existed; no new file was written.
+          example: false
 
     DeleteResponse:
       type: object
@@ -181,6 +186,15 @@ paths:
                   format: binary
                   description: The image file to upload.
       responses:
+        "200":
+          description: Image already exists (duplicate). No new file was written.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UploadResponse'
+              example:
+                filename: "photo.webp"
+                alreadyPresent: true
         "201":
           description: Image successfully uploaded and converted.
           content:
@@ -259,6 +273,15 @@ paths:
                   description: Publicly accessible URL of the image to fetch and store.
                   example: "https://example.com/photo.jpg"
       responses:
+        "200":
+          description: Image already exists (duplicate). No new file was written.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UploadResponse'
+              example:
+                filename: "photo.webp"
+                alreadyPresent: true
         "201":
           description: Image successfully fetched and converted.
           content:
@@ -309,8 +332,8 @@ paths:
         If `w` and/or `h` are provided, the server returns a resized version of the image.
 
         #### Cache lookup order
-        1. Check in-memory index: if variant key `(w, h)` is registered for this UUID, serve
-           the file `{uuid}_{w}x{h}.webp` directly.
+        1. Check in-memory index: if variant key `(w, h)` is registered for this name, serve
+           the file `{name}_{w}x{h}.webp` directly.
         2. Check disk: `Files.exists(variantPath)`. If found, register it in the index and serve.
         3. Generate: decode the original WebP, resize using `java.awt.Image.getScaledInstance`
            (bilinear), encode back to WebP via `webp4j`, write to a temporary file, atomically
@@ -318,17 +341,6 @@ paths:
            serve.
 
         #### Resize semantics
-        Both `w` and `h` can be provided. If only one is provided, the image is resized
-        proportionally (aspect ratio preserved). If both are provided, the image is cropped to
-        fill the target rectangle (cover mode).
-
-        #### VALID_SIZES enforcement
-        If `VALID_SIZES` is configured, both `w` and `h` must be values present in that list.
-        Requests with unlisted sizes are rejected with HTTP 400.
-
-        #### Animated WebP
-        Animated WebP files (converted from GIF) are served as-is regardless of `w` / `h`.
-        Resizing animated WebP is not supported in v1 and returns HTTP 400.
 
       tags:
         - images
@@ -338,9 +350,9 @@ paths:
           required: true
           schema:
             type: string
-            pattern: '^[a-f0-9\-]{36}\.webp$'
-          description: The filename returned by the upload endpoint. Must match `{uuidv4}.webp`.
-          example: "3f2a1b4c-8e7d-4f6a-9b2c-1d3e5f7a9b0c.webp"
+            pattern: '^[a-z0-9\-.]+\.webp$'
+          description: The filename returned by the upload endpoint.
+          example: "photo.webp"
         - name: w
           in: query
           required: false
@@ -447,9 +459,9 @@ paths:
           required: true
           schema:
             type: string
-            pattern: '^[a-f0-9\-]{36}\.webp$'
+            pattern: '^[a-z0-9\-.]+\.webp$'
           description: The filename returned by the upload endpoint.
-          example: "3f2a1b4c-8e7d-4f6a-9b2c-1d3e5f7a9b0c.webp"
+          example: "photo.webp"
       responses:
         "200":
           description: Image and all variants successfully deleted.

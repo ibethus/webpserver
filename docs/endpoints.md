@@ -15,6 +15,8 @@ The full machine-readable contract is available as an [OpenAPI 3.1 specification
 
 Upload an image via multipart form. The image is validated, converted to WebP and stored on disk. The returned `filename` is used for all subsequent GET and DELETE requests.
 
+The filename stored on disk is derived from the original filename you upload: the extension is stripped, the name is lowercased, and any character outside `[a-z0-9-.]` is replaced with `-`. For example `My Photo_2024.JPG` becomes `my-photo-2024.webp`.
+
 ### Request — multipart file upload
 
 ```
@@ -36,8 +38,18 @@ Authorization: Bearer <your-api-key>
 
 ### Response — 201 Created
 
+New image stored successfully:
+
 ```json
-{"filename": "3f2a1b4c-8e7d-4f6a-9b2c-1d3e5f7a9b0c.webp"}
+{"filename": "photo.webp", "alreadyPresent": false}
+```
+
+### Response — 200 OK (duplicate)
+
+An image with this name already exists on the server. No file was overwritten:
+
+```json
+{"filename": "photo.webp", "alreadyPresent": true}
 ```
 
 ### Error responses
@@ -87,8 +99,18 @@ Authorization: Bearer <your-api-key>
 
 ### Response — 201 Created
 
+New image stored successfully:
+
 ```json
-{"filename": "3f2a1b4c-8e7d-4f6a-9b2c-1d3e5f7a9b0c.webp"}
+{"filename": "photo.webp", "alreadyPresent": false}
+```
+
+### Response — 200 OK (duplicate)
+
+An image derived from this URL's filename already exists on the server. No file was overwritten:
+
+```json
+{"filename": "photo.webp", "alreadyPresent": true}
 ```
 
 ### Error responses
@@ -128,7 +150,7 @@ Retrieve an image. Optionally resize it by providing `w` and/or `h` query parame
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `filename` | path | yes | The filename returned by the upload endpoint. Format: `{uuidv4}.webp` |
+| `filename` | path | yes | The filename returned by the upload endpoint. Format: `{name}.webp` where `name` is `[a-z0-9-.]` |
 | `w` | query | no | Target width in pixels |
 | `h` | query | no | Target height in pixels |
 
@@ -173,19 +195,19 @@ Binary WebP image. `Content-Type: image/webp`.
 
 ```bash
 # Original image
-curl http://localhost:8080/3f2a1b4c-8e7d-4f6a-9b2c-1d3e5f7a9b0c.webp \
+curl http://localhost:8080/photo.webp \
   --output photo.webp
 
 # Resize to 320x240 (cover crop)
-curl "http://localhost:8080/3f2a1b4c-8e7d-4f6a-9b2c-1d3e5f7a9b0c.webp?w=320&h=240" \
+curl "http://localhost:8080/photo.webp?w=320&h=240" \
   --output photo_320x240.webp
 
 # Resize to width 640, proportional height
-curl "http://localhost:8080/3f2a1b4c-8e7d-4f6a-9b2c-1d3e5f7a9b0c.webp?w=640" \
+curl "http://localhost:8080/photo.webp?w=640" \
   --output photo_640.webp
 
 # Check cache header
-curl -I "http://localhost:8080/3f2a1b4c-8e7d-4f6a-9b2c-1d3e5f7a9b0c.webp?w=320&h=240"
+curl -I "http://localhost:8080/photo.webp?w=320&h=240"
 # X-Cache: HIT  (on second request)
 ```
 
@@ -232,7 +254,7 @@ Authorization: Bearer <your-api-key>
 ```bash
 curl -X DELETE \
   -H "Authorization: Bearer your-api-key" \
-  http://localhost:8080/3f2a1b4c-8e7d-4f6a-9b2c-1d3e5f7a9b0c.webp
+  http://localhost:8080/photo.webp
 ```
 
 ---

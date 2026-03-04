@@ -1,5 +1,6 @@
 package io.webpserver.service;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import io.webpserver.config.AppConfig;
 import io.webpserver.exception.*;
 import io.webpserver.model.ImageEntry;
@@ -22,7 +23,6 @@ import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.time.Duration;
 import java.util.Optional;
-import java.util.UUID;
 
 @ApplicationScoped
 public class ImageService {
@@ -45,23 +45,27 @@ public class ImageService {
         this.config = config;
     }
 
-    public UploadResult upload(byte[] bytes) throws IOException {
+    public UploadResult upload(byte[] bytes, String rawOriginalName) throws IOException {
         long maxBytes = (long) config.maxSizeMb() * 1024 * 1024;
         if (bytes.length > maxBytes) {
             LOG.warnf("Upload rejected: file size %d exceeds limit of %d bytes", bytes.length, maxBytes);
             throw new FileTooLargeException((int) config.maxSizeMb());
         }
         String format = conversionService.detectFormat(bytes);
-        LOG.infof("Uploading %s image (%d bytes)", format, bytes.length);
-        String uuid = UUID.randomUUID().toString();
-        String filename = uuid + WEBP_EXTENSION;
+        String stem = FilenameUtils.sanitize(rawOriginalName);
+        if (cacheService.getEntry(stem).isPresent()) {
+            LOG.infof("Duplicate upload detected: %s already exists", stem);
+            return new UploadResult(stem + WEBP_EXTENSION, true);
+        }
+        LOG.infof("Uploading %s image (%d bytes) as %s", format, bytes.length, stem);
+        String filename = stem + WEBP_EXTENSION;
         Path filePath = cacheService.getImagesDir().resolve(filename);
         byte[] webpBytes = conversionService.toWebP(bytes, format);
         Files.write(filePath, webpBytes);
-        cacheService.registerImage(uuid);
+        cacheService.registerImage(stem);
         int compressionPct = (int) Math.round(100.0 * (bytes.length - webpBytes.length) / bytes.length);
         LOG.infof("Uploaded image: %s (%d bytes -> %d bytes WebP, %d%%)", filename, bytes.length, webpBytes.length, compressionPct);
-        return new UploadResult(filename);
+        return new UploadResult(filename, false);
     }
 
     public UploadResult uploadFromUrl(String url) throws IOException {
@@ -94,7 +98,12 @@ public class ImageService {
             LOG.warnf(e, "Failed to fetch remote URL: %s", url);
             throw new RemoteUrlException("Failed to fetch URL: " + e.getMessage());
         }
-        return upload(remoteBytes);
+        String urlPath = URI.create(url).getPath();
+        String lastSegment = urlPath.substring(urlPath.lastIndexOf('/') + 1);
+        if (lastSegment.isEmpty()) {
+            lastSegment = "image";
+        }
+        return upload(remoteBytes, lastSegment);
     }
 
     public ServeResult serveImage(String inputFilename, Integer w, Integer h) throws IOException {
@@ -238,9 +247,13 @@ public class ImageService {
     }
 
     public record UploadResult(
-            @Schema(description = "Generated filename of the stored WebP image.",
-                    example = "3f2a1b4c-8e7d-4f6a-9b2c-1d3e5f7a9b0c.webp")
-            String filename) {
+            @Schema(description = "Filename of the stored WebP image, derived from the original filename.",
+                    example = "photo.webp")
+            String filename,
+            @JsonProperty("alreadyPresent")
+            @Schema(description = "True if an image with this name already existed; no new file was written.",
+                    example = "false")
+            boolean alreadyPresent) {
     }
 
     public record ServeResult(byte[] bytes, boolean cacheHit) {

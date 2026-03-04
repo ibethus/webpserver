@@ -10,7 +10,7 @@ import org.junit.jupiter.api.DisplayName;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Paths;
-import java.util.regex.Pattern;
+import java.util.UUID;
 
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.*;
@@ -21,8 +21,6 @@ import static org.junit.jupiter.api.Assertions.*;
 public class ImageApiIT {
 
     private static final String API_KEY = "test-api-key";
-    private static final Pattern UUID_PATTERN = Pattern.compile(
-            "^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$");
     private byte[] sampleJpg;
     private byte[] samplePng;
     private byte[] sampleGif;
@@ -39,52 +37,52 @@ public class ImageApiIT {
     }
 
     @Test
-    @DisplayName("POST / with JPEG multipart should return 201 with filename")
+    @DisplayName("POST / with JPEG multipart should return 2xx with filename")
     public void testUploadJpegMultipart() {
         given()
                 .multiPart("file", "sample.jpg", sampleJpg)
                 .when()
                 .post("/")
                 .then()
-                .statusCode(201)
+                .statusCode(anyOf(equalTo(200), equalTo(201)))
                 .contentType(ContentType.JSON)
                 .body("filename", notNullValue())
                 .body("filename", endsWith(".webp"));
     }
 
     @Test
-    @DisplayName("POST / with PNG multipart should return 201 with filename")
+    @DisplayName("POST / with PNG multipart should return 2xx with filename")
     public void testUploadPngMultipart() {
         given()
                 .multiPart("file", "sample.png", samplePng)
                 .when()
                 .post("/")
                 .then()
-                .statusCode(201)
+                .statusCode(anyOf(equalTo(200), equalTo(201)))
                 .body("filename", endsWith(".webp"));
     }
 
     @Test
-    @DisplayName("POST / with GIF multipart should return 201 with filename")
+    @DisplayName("POST / with GIF multipart should return 2xx with filename")
     public void testUploadGifMultipart() {
         given()
                 .multiPart("file", "sample.gif", sampleGif)
                 .when()
                 .post("/")
                 .then()
-                .statusCode(201)
+                .statusCode(anyOf(equalTo(200), equalTo(201)))
                 .body("filename", endsWith(".webp"));
     }
 
     @Test
-    @DisplayName("POST / with WebP multipart should return 201 with filename")
+    @DisplayName("POST / with WebP multipart should return 2xx with filename")
     public void testUploadWebpMultipart() {
         given()
                 .multiPart("file", "sample.webp", sampleWebp)
                 .when()
                 .post("/")
                 .then()
-                .statusCode(201)
+                .statusCode(anyOf(equalTo(200), equalTo(201)))
                 .body("filename", endsWith(".webp"));
     }
 
@@ -118,7 +116,7 @@ public class ImageApiIT {
     }
 
     @Test
-    @DisplayName("POST / JSON with valid URL should return 201")
+    @DisplayName("POST / JSON with valid URL should return 2xx")
     public void testUploadFromUrl() {
         given()
                 .header("Authorization", "Bearer " + API_KEY)
@@ -127,7 +125,7 @@ public class ImageApiIT {
                 .when()
                 .post("/")
                 .then()
-                .statusCode(201)
+                .statusCode(anyOf(equalTo(200), equalTo(201)))
                 .body("filename", notNullValue());
     }
 
@@ -146,8 +144,9 @@ public class ImageApiIT {
     @Test
     @DisplayName("GET /{filename} should return 200 with WebP image")
     public void testGetImageOriginal() {
+        String uniqueName = "get-orig-" + UUID.randomUUID() + ".jpg";
         Response uploadResp = given()
-                .multiPart("file", "sample.jpg", sampleJpg)
+                .multiPart("file", uniqueName, sampleJpg)
                 .post("/");
         String filename = uploadResp.path("filename");
 
@@ -163,8 +162,9 @@ public class ImageApiIT {
     @Test
     @DisplayName("GET /{filename} second request should have cache HIT")
     public void testGetImageCacheHit() {
+        String uniqueName = "cache-hit-" + UUID.randomUUID() + ".jpg";
         Response uploadResp = given()
-                .multiPart("file", "sample.png", samplePng)
+                .multiPart("file", uniqueName, samplePng)
                 .post("/");
         String filename = uploadResp.path("filename");
 
@@ -319,8 +319,9 @@ public class ImageApiIT {
     @Test
     @DisplayName("GET /{filename} should cache HIT after resize variant is created")
     public void testResizeAndCacheHit() {
+        String uniqueName = "resize-cache-" + UUID.randomUUID() + ".jpg";
         Response uploadResp = given()
-                .multiPart("file", "sample.png", samplePng)
+                .multiPart("file", uniqueName, samplePng)
                 .post("/");
         String filename = uploadResp.path("filename");
 
@@ -342,15 +343,37 @@ public class ImageApiIT {
     }
 
     @Test
-    @DisplayName("POST / should return valid UUID.webp filename format")
+    @DisplayName("POST / should return a filename derived from the original filename")
     public void testUploadFilenameFormat() {
         Response resp = given()
                 .multiPart("file", "sample.jpg", sampleJpg)
                 .post("/");
 
+        resp.then().statusCode(anyOf(equalTo(200), equalTo(201)));
         String filename = resp.path("filename");
-        String uuid = filename.replace(".webp", "");
-        assertTrue(UUID_PATTERN.matcher(uuid).matches(),
-                "Filename should be valid UUIDv4 with .webp extension");
+        assertEquals("sample.webp", filename, "Filename should be derived from the original filename");
+        assertTrue(filename.matches("^[a-z0-9\\-.]+\\.webp$"), "Filename should match the sanitized pattern");
+    }
+
+    @Test
+    @DisplayName("POST / uploading the same filename twice should return 200 with alreadyPresent: true")
+    public void testUploadDuplicate() {
+        // Ensure the image is present
+        given()
+                .multiPart("file", "sample.jpg", sampleJpg)
+                .when()
+                .post("/")
+                .then()
+                .body("filename", equalTo("sample.webp"));
+
+        // Second upload with the same original filename must return 200 with alreadyPresent: true
+        given()
+                .multiPart("file", "sample.jpg", sampleJpg)
+                .when()
+                .post("/")
+                .then()
+                .statusCode(200)
+                .body("filename", equalTo("sample.webp"))
+                .body("alreadyPresent", equalTo(true));
     }
 }

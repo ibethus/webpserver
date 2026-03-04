@@ -7,29 +7,25 @@ import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import jakarta.ws.rs.ext.ExceptionMapper;
 import jakarta.ws.rs.ext.Provider;
-import org.jboss.logging.Logger;
 
 @Provider
 public class GlobalExceptionMapper implements ExceptionMapper<Throwable> {
-
-    private static final Logger LOG = Logger.getLogger(GlobalExceptionMapper.class);
-
-    @Override
-    public Response toResponse(Throwable exception) {
-        Response.ResponseBuilder responseBuilder = switch (exception) {
-            case NotFoundException ignored -> Response.status(Response.Status.NOT_FOUND)
-                    .entity(new ErrorResponse("Not found."))
-                    .type(MediaType.APPLICATION_JSON);
-            case NotAllowedException ignored -> Response.status(Response.Status.NOT_ACCEPTABLE)
-                    .entity(new ErrorResponse("Not allowed."))
-                    .type(MediaType.APPLICATION_JSON);
-            case WebApplicationException ignored -> Response.status(Response.Status.NOT_FOUND)
-                    .entity(new ErrorResponse("Not found."))
-                    .type(MediaType.APPLICATION_JSON);
-            default -> Response.status(Response.Status.INTERNAL_SERVER_ERROR)
-                    .entity(new ErrorResponse("Internal server error."))
-                    .type(MediaType.APPLICATION_JSON);
-        };
-        return responseBuilder.build();
-    }
+        @Override
+        public Response toResponse(Throwable exception) {
+                Response.ResponseBuilder responseBuilder = switch (exception) {
+                        case NotFoundException ignored -> Response.status(Response.Status.NOT_FOUND)
+                                        .entity(new ErrorResponse("Not found."))
+                                        .type(MediaType.APPLICATION_JSON);
+                        case NotAllowedException ignored -> Response.status(Response.Status.NOT_ACCEPTABLE)
+                                        .entity(new ErrorResponse("Not allowed."))
+                                        .type(MediaType.APPLICATION_JSON);
+                        case WebApplicationException ignored -> Response.status(Response.Status.NOT_FOUND)
+                                        .entity(new ErrorResponse("Not found."))
+                                        .type(MediaType.APPLICATION_JSON);
+                        default -> Response.status(Response.Status.INTERNAL_SERVER_ERROR)
+                                        .entity(new ErrorResponse("Internal server error."))
+                                        .type(MediaType.APPLICATION_JSON);
+                };
+                return responseBuilder.build();
+        }
 }
