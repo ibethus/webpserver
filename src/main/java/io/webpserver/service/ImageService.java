@@ -12,6 +12,7 @@ import org.eclipse.microprofile.openapi.annotations.media.Schema;
 import org.jboss.logging.Logger;
 
 import java.awt.image.BufferedImage;
+import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -71,11 +72,10 @@ public class ImageService {
     public UploadResult uploadFromUrl(String url) throws IOException {
         LOG.infof("Fetching image from URL: %s", url);
         byte[] remoteBytes;
-        try {
-            HttpClient client = HttpClient.newBuilder()
-                    .followRedirects(HttpClient.Redirect.NORMAL)
-                    .connectTimeout(HTTP_CONNECT_TIMEOUT)
-                    .build();
+        try (HttpClient client = HttpClient.newBuilder()
+                .followRedirects(HttpClient.Redirect.NORMAL)
+                .connectTimeout(HTTP_CONNECT_TIMEOUT)
+                .build()) {
             HttpRequest request = HttpRequest.newBuilder(URI.create(url))
                     .timeout(HTTP_REQUEST_TIMEOUT)
                     .GET()
@@ -128,9 +128,13 @@ public class ImageService {
         ImageVariant key = new ImageVariant(w != null ? w : 0, h != null ? h : 0);
         if (entry.hasVariant(key)) {
             Path variantPath = buildVariantPath(filename, key);
-            byte[] bytes = Files.readAllBytes(variantPath);
-            LOG.infof("Cache HIT (in-memory): %s variant %dx%d", filename, key.getWidth(), key.getHeight());
-            return new ServeResult(bytes, true);
+            try {
+                byte[] bytes = Files.readAllBytes(variantPath);
+                LOG.infof("Cache HIT (in-memory): %s variant %dx%d", filename, key.getWidth(), key.getHeight());
+                return new ServeResult(bytes, true);
+            } catch (IOException e) {
+                deleteCacheForMissingFile(filename);
+            }
         }
 
         Path variantPath = buildVariantPath(filename, key);
@@ -140,11 +144,21 @@ public class ImageService {
             LOG.infof("Cache HIT (disk fallback): %s variant %dx%d", filename, key.getWidth(), key.getHeight());
             return new ServeResult(bytes, true);
         }
-        LOG.infof("Cache MISS: generating variant %dx%d for %s", key.getWidth(), key.getHeight(), filename);
+        Path originalPath = cacheService.getImagesDir().resolve(filename + WEBP_EXTENSION);
+        if (Files.exists(originalPath)) {
+            LOG.infof("Cache MISS: generating variant %dx%d for %s", key.getWidth(), key.getHeight(), filename);
 
-        byte[] encoded = registerNewVariant(w, h, filename, key, variantPath);
+            byte[] encoded = registerNewVariant(w, h, filename, key, variantPath);
+            return new ServeResult(encoded, false);
+        }
 
-        return new ServeResult(encoded, false);
+        throw new FileNotFoundException();
+    }
+
+    private void deleteCacheForMissingFile(String filename) {
+        LOG.errorf("Original file missing from disk for: %s", filename);
+        cacheService.removeEntry(filename);
+        throw new ImageNotFoundException();
     }
 
     private byte[] registerNewVariant(Integer w, Integer h, String uuid, ImageVariant key, Path variantPath) throws IOException {
@@ -176,9 +190,13 @@ public class ImageService {
         Path originalPath = cacheService.getImagesDir().resolve(inputFilename);
 
         if (entry.hasVariant(ORIGINAL_KEY)) {
-            byte[] bytes = Files.readAllBytes(originalPath);
-            LOG.infof("Cache HIT (in-memory): %s original", uuid);
-            return new ServeResult(bytes, true);
+            try {
+                byte[] bytes = Files.readAllBytes(originalPath);
+                LOG.infof("Cache HIT (in-memory): %s original", uuid);
+                return new ServeResult(bytes, true);
+            } catch (IOException e) {
+                deleteCacheForMissingFile(uuid);
+            }
         }
 
         if (Files.exists(originalPath)) {
@@ -187,8 +205,6 @@ public class ImageService {
             LOG.infof("Cache HIT (disk fallback): original %s", uuid);
             return new ServeResult(bytes, false);
         }
-
-        LOG.warnf("Original file missing from disk for: %s", uuid);
         throw new ImageNotFoundException();
     }
 
@@ -212,7 +228,7 @@ public class ImageService {
         }
 
         ImageEntry entry = entryOpt.get();
-        int removedCount = 0;
+        int removedCount = 1;
 
         for (ImageVariant key : entry.getVariants()) {
             Path variantPath = buildVariantPath(uuid, key);

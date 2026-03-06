@@ -105,8 +105,4 @@ public class CacheService {
         return imagesDir;
     }
 
-    public void clearIndex() {
-        imagesIndex.clear();
-        LOG.info("Index cleared");
-    }
 }
