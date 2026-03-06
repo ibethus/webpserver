@@ -6,7 +6,7 @@ import java.io.InvalidObjectException;
 
 public class FilenameUtils {
     @Nonnull
-    static String getFilename(String inputFilename) throws InvalidObjectException {
+    public static String getFilename(String inputFilename) throws InvalidObjectException {
         if (!inputFilename.contains(".")) {
             throw new InvalidObjectException("Image name must contain the extension");
         }

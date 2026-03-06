@@ -61,7 +61,7 @@ public class CacheService {
         }
     }
 
-    private void processResizedImage(String[] s) throws InvalidObjectException {
+    private void processResizedImage(String[] s) {
         String filename = s[0];
         String[] dimensions = s[1].split("x");
         if (dimensions.length != 2) {
@@ -78,7 +78,7 @@ public class CacheService {
     }
 
     public void registerImage(String name) {
-        imagesIndex.registerEntry(name);
+        imagesIndex.addOriginal(name);
         LOG.infof("Registered original: %s", name);
     }
 
@@ -103,5 +103,10 @@ public class CacheService {
 
     public Path getImagesDir() {
         return imagesDir;
+    }
+
+    public void clearIndex() {
+        imagesIndex.clear();
+        LOG.info("Index cleared");
     }
 }

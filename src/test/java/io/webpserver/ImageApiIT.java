@@ -3,22 +3,35 @@ package io.webpserver;
 import io.quarkus.test.junit.QuarkusTest;
 import io.restassured.http.ContentType;
 import io.restassured.response.Response;
+import io.webpserver.config.AppConfig;
+import io.webpserver.service.CacheService;
+import io.webpserver.service.FilenameUtils;
+import jakarta.inject.Inject;
 import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.UUID;
+import java.util.stream.Stream;
 
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.*;
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @QuarkusTest
 @DisplayName("Image API Integration Tests")
 public class ImageApiIT {
+
+    @Inject
+    AppConfig appConfig;
+
+    @Inject
+    CacheService cacheService;
 
     private static final String API_KEY = "test-api-key";
     private byte[] sampleJpg;
@@ -29,6 +42,16 @@ public class ImageApiIT {
 
     @BeforeEach
     public void loadFixtures() throws IOException {
+        try (Stream<Path> images = Files.list(Path.of(appConfig.imagesDir()))) {
+            images.forEach(file -> {
+                try {
+                    Files.delete(file);
+                    cacheService.removeEntry(FilenameUtils.getFilename(file.getFileName().toString()));
+                } catch (IOException e) {
+                    throw new RuntimeException(e);
+                }
+            });
+        }
         sampleJpg = Files.readAllBytes(Paths.get("src/test/resources/fixtures/sample.jpg"));
         samplePng = Files.readAllBytes(Paths.get("src/test/resources/fixtures/sample.png"));
         sampleGif = Files.readAllBytes(Paths.get("src/test/resources/fixtures/sample.gif"));
@@ -106,7 +129,7 @@ public class ImageApiIT {
         oversized[0] = (byte) 0xFF;
         oversized[1] = (byte) 0xD8;
         oversized[2] = (byte) 0xFF;
-        
+
         given()
                 .multiPart("file", "oversized.jpg", oversized)
                 .when()
@@ -156,7 +179,7 @@ public class ImageApiIT {
                 .then()
                 .statusCode(200)
                 .contentType("image/webp")
-                .header("X-Cache", "MISS");
+                .header("X-Cache", "HIT");
     }
 
     @Test
@@ -173,7 +196,7 @@ public class ImageApiIT {
                 .get("/" + filename)
                 .then()
                 .statusCode(200)
-                .header("X-Cache", "MISS");
+                .header("X-Cache", "HIT");
 
         given()
                 .when()

@@ -23,15 +23,6 @@ public class ImagesIndex {
         }
     }
 
-    /**
-     * Registers a new entry with no variants. Used for fresh uploads: ORIGINAL_KEY is added
-     * only when the original is first served, ensuring X-Cache: MISS on first access.
-     */
-    public void registerEntry(String name) {
-        Log.infof("Registering new index entry: %s", name);
-        index.putIfAbsent(name, new ImageEntry());
-    }
-
     public void addResized(String name, int width, int height) {
         this.addResized(name, new ImageVariant(width, height));
     }
@@ -63,6 +54,10 @@ public class ImagesIndex {
 
     public int originalsSize() {
         return index.size();
+    }
+
+    public void clear() {
+        index.clear();
     }
 
     public long variantsSize() {
