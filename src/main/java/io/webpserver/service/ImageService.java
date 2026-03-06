@@ -184,7 +184,7 @@ public class ImageService {
         if (Files.exists(originalPath)) {
             cacheService.registerImage(uuid);
             byte[] bytes = Files.readAllBytes(originalPath);
-            LOG.infof("Cache MISS: %s original", uuid);
+            LOG.infof("Cache HIT (disk fallback): original %s", uuid);
             return new ServeResult(bytes, false);
         }
 
