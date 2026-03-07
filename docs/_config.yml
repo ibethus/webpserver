@@ -6,7 +6,7 @@ url: "https://ibethus.github.io"
 theme: minima
 
 minima:
-  skin: dark
+  skin: light
 
 header_pages:
   - index.md
