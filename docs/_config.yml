@@ -11,6 +11,7 @@ minima:
 header_pages:
   - index.md
   - endpoints.md
+  - openapi.md
   - configuration.md
   - architecture.md
   - docker.md

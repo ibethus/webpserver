@@ -1,0 +1,280 @@
+---
+openapi: 3.0.3
+info:
+  title: webpserver API
+  version: 1.0.0-SNAPSHOT
+tags:
+- name: images
+- name: health
+paths:
+  /:
+    post:
+      tags:
+      - images
+      summary: Upload an image from URL
+      description: |-
+        Fetches the image at the given URL, converts it to WebP, stores it on disk and indexes it.
+
+        Accepted formats: **JPEG**, **PNG**, **WebP**, **GIF** (converted to animated WebP).
+
+        Auth is required only if `REQUIRE_API_KEY_FOR_UPLOAD=true`.
+      operationId: uploadImageFromUrl
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/MultipartBody'
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UploadUrlRequest'
+      responses:
+        "200":
+          description: Image already exists (duplicate). No new file was written.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UploadResult'
+        "201":
+          description: Image successfully fetched and converted.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UploadResult'
+        "400":
+          description: "Missing or empty `url` field, or unsupported image format."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        "401":
+          description: Missing or invalid Bearer token.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        "429":
+          description: Upload rate limit exceeded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        "500":
+          description: Internal error during conversion or storage.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        "422":
+          description: "URL unreachable, returns non-2xx, or content is not a supported\
+            \ image format."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      security:
+      - ? ""
+        : []
+      - BearerAuth: []
+  /liveness:
+    get:
+      tags:
+      - health
+      summary: Liveness probe
+      description: Returns HTTP 200 unconditionally. Used by Docker healthcheck and
+        Kubernetes liveness probes. Never requires authentication.
+      operationId: liveness
+      responses:
+        "200":
+          description: Service is alive.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LivenessResponse'
+      security: []
+  /{filename}:
+    get:
+      tags:
+      - images
+      summary: Retrieve an image
+      description: |-
+        Returns the image identified by `filename`.
+
+        - **No `w`/`h`**: returns the original WebP.
+        - **With `w` and/or `h`**: returns a resized variant (cover crop when both given, proportional when only one is given). Variants are generated on first request and cached on disk.
+
+        The `VALID_SIZES` configuration restricts which values are accepted for `w` and `h`.
+
+        Animated WebP files (converted from GIF) cannot be resized — returns HTTP 400.
+      operationId: getImage
+      parameters:
+      - name: filename
+        in: path
+        description: "Filename returned by the upload endpoint. Must be `{name}.webp`\
+          \ where `name` contains only lowercase letters, digits, hyphens and dots."
+        required: true
+        schema:
+          pattern: "^[a-z0-9\\-.]+\\.webp$"
+          type: string
+        example: photo.webp
+      - name: h
+        in: query
+        description: Target height in pixels.
+        schema:
+          maximum: 10000
+          minimum: 1
+          type: integer
+      - name: w
+        in: query
+        description: Target width in pixels.
+        schema:
+          maximum: 10000
+          minimum: 1
+          type: integer
+      responses:
+        "200":
+          description: Image content.
+          headers:
+            X-Cache:
+              description: "`HIT` if served from cache (in-memory index or disk),\
+                \ `MISS` if generated on this request."
+              style: simple
+              schema:
+                enum:
+                - HIT
+                - MISS
+                type: string
+            Cache-Control:
+              description: "`public, max-age=31536000, immutable` for cached variants;\
+                \ `public, max-age=3600` for originals."
+              style: simple
+              schema:
+                type: string
+          content:
+            image/webp:
+              schema:
+                format: binary
+                type: string
+        "400":
+          description: "Size not in `VALID_SIZES`, or resize requested on an animated\
+            \ WebP."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        "404":
+          description: Image not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        "500":
+          description: "Internal error during decoding, resizing or encoding."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    delete:
+      tags:
+      - images
+      summary: Delete an image and all its cached variants
+      description: |-
+        Deletes the original image and all resized variants from disk. The entry is removed from the in-memory index.
+
+        Authentication is always required if `API_KEY` is set.
+      operationId: deleteImage
+      parameters:
+      - name: filename
+        in: path
+        description: Filename returned by the upload endpoint.
+        required: true
+        schema:
+          pattern: "^[a-z0-9\\-.]+\\.webp$"
+          type: string
+        example: photo.webp
+      responses:
+        "200":
+          description: Image and all variants successfully deleted.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeleteResult'
+        "401":
+          description: Missing or invalid Bearer token.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        "404":
+          description: Image not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        "500":
+          description: Unexpected error during deletion.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      security:
+      - BearerAuth: []
+components:
+  schemas:
+    DeleteResult:
+      type: object
+      properties:
+        status:
+          description: Deletion status.
+          enum:
+          - deleted
+          type: string
+          example: deleted
+        cachedFilesRemoved:
+          format: int32
+          description: Number of resized variant files that were also deleted.
+          type: integer
+          example: 3
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          description: Human-readable description of the error.
+          type: string
+          example: "Unsupported image format. Accepted: jpeg, png, webp, gif."
+    FileUpload:
+      type: object
+    LivenessResponse:
+      type: object
+      properties:
+        status:
+          description: Service status.
+          enum:
+          - ok
+          type: string
+          example: ok
+    MultipartBody:
+      type: object
+      properties:
+        file:
+          $ref: '#/components/schemas/FileUpload'
+    UploadResult:
+      type: object
+      properties:
+        filename:
+          description: "Filename of the stored WebP image, derived from the original\
+            \ filename."
+          type: string
+          example: photo.webp
+        alreadyPresent:
+          description: True if an image with this name already existed; no new file
+            was written.
+          type: boolean
+          example: false
+    UploadUrlRequest:
+      type: object
+      properties:
+        url:
+          format: uri
+          description: Publicly accessible URL of the image to fetch and store.
+          type: string
+          example: https://example.com/photo.jpg

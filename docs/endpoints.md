@@ -7,7 +7,8 @@ nav_order: 2
 
 # API Endpoints
 
-The full machine-readable contract is available as an [OpenAPI 3.1 specification](https://github.com/ibethus/webpserver/blob/main/openapi.yaml).
+The full machine-readable contract is available as an [OpenAPI 3.1 specification](https://github.com/ibethus/webpserver/blob/main/openapi.yaml),
+or browse it interactively via the [Swagger UI](/webpserver/api/).
 
 ---
 
@@ -255,60 +256,4 @@ Authorization: Bearer <your-api-key>
 curl -X DELETE \
   -H "Authorization: Bearer your-api-key" \
   http://localhost:8080/photo.webp
-```
-
----
-
-## GET /liveness
-
-Liveness probe endpoint. Always returns 200. Never requires authentication. Used by Docker and Kubernetes health checkers.
-
-### Response — 200 OK
-
-```json
-{"status": "ok"}
-```
-
-### Example
-
-```bash
-curl http://localhost:8080/liveness
-# {"status":"ok"}
-```
-
----
-
-## GET /q/metrics
-
-Exposes application metrics in Prometheus text format. Served by the [Micrometer](https://micrometer.io/) registry bundled with Quarkus.
-
-### Authentication
-
-This endpoint is always public.
-
-### Response — 200 OK
-
-Prometheus text exposition format (`text/plain; version=0.0.4`).
-
-```
-# HELP jvm_memory_used_bytes ...
-# TYPE jvm_memory_used_bytes gauge
-jvm_memory_used_bytes{area="heap",...} 4.2e+07
-...
-```
-
-### Example
-
-```bash
-curl http://localhost:8080/q/metrics
-```
-
-To scrape from Prometheus, add a job to your `prometheus.yml`:
-
-```yaml
-scrape_configs:
-  - job_name: webpserver
-    static_configs:
-      - targets: ['localhost:8080']
-    metrics_path: /q/metrics
 ```

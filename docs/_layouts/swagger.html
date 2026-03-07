@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{{ page.title }} | {{ site.title }}</title>
+  <link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@5/swagger-ui.css" />
+  <style>
+    body { margin: 0; background: #1a1a2e; }
+    .swagger-ui .topbar { display: none; }
+    nav.site-nav, .site-header, .site-footer {
+      font-family: system-ui, sans-serif;
+      background: #1a1a2e;
+      border-bottom: 1px solid #333;
+    }
+    .site-header {
+      padding: 0 1.5rem;
+      display: flex;
+      align-items: center;
+      gap: 2rem;
+      height: 56px;
+    }
+    .site-header a {
+      color: #ccc;
+      text-decoration: none;
+      font-size: 0.9rem;
+    }
+    .site-header a.site-title {
+      color: #fff;
+      font-weight: bold;
+      font-size: 1rem;
+    }
+    .site-header a:hover { color: #fff; }
+    .site-footer {
+      text-align: center;
+      padding: 1rem;
+      font-size: 0.75rem;
+      color: #666;
+      border-top: 1px solid #333;
+      border-bottom: none;
+    }
+  </style>
+</head>
+<body>
+  <header class="site-header">
+    <a class="site-title" href="{{ site.baseurl }}/">{{ site.title }}</a>
+    {% for page_path in site.header_pages %}
+      {% assign node = site.pages | where: "path", page_path | first %}
+      {% if node %}
+        <a href="{{ node.url | prepend: site.baseurl }}">{{ node.title }}</a>
+      {% endif %}
+    {% endfor %}
+  </header>
+
+  <div id="swagger-ui"></div>
+
+  <footer class="site-footer">
+    {{ site.title }} &mdash; {{ site.description }}
+  </footer>
+
+  <script src="https://unpkg.com/swagger-ui-dist@5/swagger-ui-bundle.js"></script>
+  <script>
+    SwaggerUIBundle({
+      url: "{{ site.baseurl }}/assets/openapi.yml",
+      dom_id: "#swagger-ui",
+      presets: [SwaggerUIBundle.presets.apis, SwaggerUIBundle.SwaggerUIStandalonePreset],
+      layout: "BaseLayout",
+      deepLinking: true,
+      tryItOutEnabled: false
+    });
+  </script>
+</body>
+</html>

@@ -38,7 +38,6 @@ nav_order: 4
                      │
          ┌───────────▼───────────┐
          │  ImageResource        │  JAX-RS, @RunOnVirtualThread
-         │  LivenessResource     │
          └───────────┬───────────┘
                      │
          ┌───────────▼───────────┐
@@ -48,7 +47,7 @@ nav_order: 4
    ┌────────▼────┐  ┌──────▼────────┐
    │Conversion   │  │  CacheService │
    │Service      │  │               │
-   │(webp4j/JNI) │  │ ConcurrentMap │
+   │(webp4j/JNI) │  │ ImagesIndex   │
    └─────────────┘  │ + disk scan   │
                     └──────┬────────┘
                            │
@@ -77,9 +76,11 @@ Input bytes
                           WebPCodec.encodeImage(img, quality)
                           or encodeLosslessImage(img)
                                      │
-                              {uuid}.webp written to disk
-                              UUID registered in CacheService
+                              {stem}.webp written to disk
+                              stem registered in CacheService
 ```
+
+The filename stem is derived from the original upload name: lowercased, extension stripped, characters outside `[a-z0-9-.]` replaced with `-` (`FilenameUtils.sanitize`).
 
 ---
 
@@ -89,11 +90,11 @@ The cache has two levels:
 
 **Level 1 — In-memory index**
 
-A `ConcurrentHashMap<String, ImageEntry>` maps each UUID to its known variant set. Lookups are O(1). The index is rebuilt from disk on every application startup by scanning `IMAGES_DIR` and parsing filenames.
+`CacheService` holds an `ImagesIndex` which wraps a `ConcurrentHashMap<String, ImageEntry>`. Each key is a filename stem (e.g. `my-photo`); each value is an `ImageEntry` holding a `HashSet<ImageVariant>` of known variants (including the original). Lookups are O(1). The index is rebuilt from disk on every application startup by scanning `IMAGES_DIR` and parsing filenames.
 
 **Level 2 — Disk**
 
-Variant files are named `{uuid}_{w}x{h}.webp`. The disk is the source of truth. If the in-memory index is missing an entry (e.g. after a crash or a multi-pod write), `Files.exists()` provides a fallback before re-encoding.
+Variant files are named `{stem}_{w}x{h}.webp`. The disk is the source of truth. If the in-memory index is missing an entry (e.g. after a crash or a multi-pod write), `Files.exists()` provides a fallback before re-encoding.
 
 **Lookup order on GET with resize:**
 
@@ -109,13 +110,13 @@ The `X-Cache: HIT / MISS` response header indicates which path was taken.
 
 ## Atomic writes and multi-pod safety
 
-Variant files are always written through a `.tmp` intermediate file:
+Original images are written directly with `Files.write()`. Resized **variant** files are always written through a `.tmp` intermediate file:
 
 ```
-encode → write {uuid}_{w}x{h}.tmp → Files.move(..., ATOMIC_MOVE) → {uuid}_{w}x{h}.webp
+encode → write {stem}_{w}x{h}.tmp → Files.move(..., ATOMIC_MOVE) → {stem}_{w}x{h}.webp
 ```
 
-`ATOMIC_MOVE` maps to `rename(2)` on Linux. A file is never visible under its final name until the write is complete. Two pods writing the same variant concurrently both succeed — the second rename overwrites the first with an identical file. No corruption, no partial reads.
+`ATOMIC_MOVE` maps to `rename(2)` on Linux. A variant file is never visible under its final name until the write is complete. Two pods writing the same variant concurrently both succeed — the second rename overwrites the first with an identical file. No corruption, no partial reads.
 
 In-memory indexes across pods converge lazily: if pod B is missing a variant created by pod A, the `Files.exists()` check at step 2 above catches it on the next request.
 
@@ -124,5 +125,3 @@ In-memory indexes across pods converge lazily: if pod B is missing a variant cre
 ## Platform support
 
 webp4j ships native libraries for `linux/amd64` and `linux/arm64` inside the JAR. The correct library is extracted and loaded at runtime. No platform-specific configuration is needed.
-
-The Docker image is built multi-arch (`linux/amd64`, `linux/arm64`) via [Quarkus Jib](https://quarkus.io/guides/container-image) in the CI/CD pipeline — no Dockerfile or Docker daemon required.
