@@ -81,14 +81,6 @@ For the full list of Quarkus HTTP and CORS options see the official docs:
 ---
 
 ## Metrics (Micrometer + Prometheus)
-
-Metrics are **disabled by default**. To enable them and expose a Prometheus scrape endpoint:
-
-```
-QUARKUS_MICROMETER_ENABLED=true
-QUARKUS_MICROMETER_EXPORT_PROMETHEUS_ENABLED=true
-```
-
 The metrics endpoint is then available at `/q/metrics`. Point your Prometheus `scrape_configs` at it:
 
 ```yaml
